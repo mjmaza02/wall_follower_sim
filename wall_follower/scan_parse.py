@@ -32,30 +32,31 @@ class ScanParse(Node):
         self.scan_sub = self.create_subscription(LaserScan, self.SCAN_TOPIC, self.listener_callback, 10)
         self.scan_sub
         self.line_pub = self.create_publisher(Marker, "/wall", 1)
-        self.dist_pub = self.create_publisher(Float32, "/wall/dist", 10)
+        self.dist_pub = self.create_publisher(Float32, "/distance_to_wall", 10)
 
     # TODO: Write your callback functions here   
     def listener_callback(self, msg):
         range_len = len(msg.ranges)
         msg_ranges = msg.ranges
         msg_angles = np.linspace(msg.angle_min, msg.angle_max, range_len)
-        filtered_ranges = []
-        filtered_angles = []
+
+        side_ranges = []
+        side_angles = []
 
         if self.SIDE == 1:
-            filtered_ranges = msg_ranges[range_len//2:]
-            filtered_angles = msg_angles[range_len//2:]
+            side_ranges = msg_ranges[range_len//2:]
+            side_angles = msg_angles[range_len//2:]
         elif self.SIDE == -1:
-            filtered_ranges = msg_ranges[:range_len//2]
-            filtered_angles = msg_angles[:range_len//2]
+            side_ranges = msg_ranges[:range_len//2]
+            side_angles = msg_angles[:range_len//2]
 
-        xs = filtered_ranges * np.cos(filtered_angles)
-        ys = filtered_ranges * np.sin(filtered_angles)
+        xs = side_ranges * np.cos(side_angles)
+        ys = side_ranges * np.sin(side_angles)
 
         slope, intercept = np.polyfit(xs, ys, 1)
 
         dist_msg = Float32()
-        dist_msg.data = (intercept * self.SIDE)
+        dist_msg.data = abs(intercept)/(slope**2+1)**(1/2)
         self.dist_pub.publish(dist_msg)
 
         x = [float(i) for i in range(5)]
