@@ -42,6 +42,7 @@ class WallFollower(Node):
 
     def listener_callback(self, msg):
         self.current_dist = msg.data
+        # self.get_logger().info(f'Current Distance: {msg.data}')
 
     def timer_callback(self):
         msg = AckermannDriveStamped()
@@ -54,8 +55,8 @@ class WallFollower(Node):
         self.drive_pub.publish(msg)
 
     def PD_control(self, current_dist):
-        Kp = 0.3
-        Kd = 0.1
+        Kp = 3
+        Kd = 1
         current_time = self.get_clock().now()
         dt = float((current_time-self.prev_time).nanoseconds * 10**-9) # proof of concept
         self.prev_time = current_time
@@ -67,7 +68,7 @@ class WallFollower(Node):
         corrected = Kp*error + Kd*de_dt
         self.prev_error = error
 
-        self.get_logger().info(f'{corrected}')
+        # self.get_logger().info(f'P: {error}, D: {de_dt}')
         return corrected
 
 
