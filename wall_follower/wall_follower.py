@@ -33,8 +33,9 @@ class WallFollower(Node):
         self.current_dist = 0
         self.prev_time = self.get_clock().now()
         self.prev_error = 0
+        self.total_error = 0
 
-        self.drive_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, self.DRIVE_TOPIC, 10)
         timer_callback = 0.05
         self.create_timer(timer_callback, self.timer_callback)
 
@@ -46,7 +47,7 @@ class WallFollower(Node):
 
     def timer_callback(self):
         msg = AckermannDriveStamped()
-        msg.drive.steering_angle = self.PD_control(self.current_dist)
+        msg.drive.steering_angle = self.PID_control(self.current_dist)
         msg.drive.steering_angle_velocity = 0.0
         msg.drive.speed = self.VELOCITY
         msg.drive.acceleration = 0.0
@@ -54,21 +55,23 @@ class WallFollower(Node):
 
         self.drive_pub.publish(msg)
 
-    def PD_control(self, current_dist):
-        Kp = 3
-        Kd = 1
+    def PID_control(self, current_dist):
+        Kp = 0.34
+        Ki = 0
+        Kd = 0
         current_time = self.get_clock().now()
         dt = float((current_time-self.prev_time).nanoseconds * 10**-9) # proof of concept
         self.prev_time = current_time
 
         error = self.DESIRED_DISTANCE - current_dist
-
+        integral_e = self.total_error + error*dt
         de_dt = (error-self.prev_error)/dt
 
-        corrected = Kp*error + Kd*de_dt
+        corrected = Kp*error + Ki*integral_e + Kd*de_dt
         self.prev_error = error
+        self.total_error += error*dt
+        self.get_logger().info(f'Current Error: {self.total_error}')
 
-        # self.get_logger().info(f'P: {error}, D: {de_dt}')
         return corrected
 
 
