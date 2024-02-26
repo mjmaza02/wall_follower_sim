@@ -32,7 +32,7 @@ class ScanParse(Node):
         self.scan_sub = self.create_subscription(LaserScan, self.SCAN_TOPIC, self.listener_callback, 10)
         self.scan_sub
         self.line_pub = self.create_publisher(Marker, "/wall", 1)
-        self.dist_pub = self.create_publisher(Float32, "/wall/dist", 10)
+        self.dist_pub = self.create_publisher(Float32, "/distance_to_wall", 10)
 
     # TODO: Write your callback functions here   
     def listener_callback(self, msg):
@@ -55,7 +55,7 @@ class ScanParse(Node):
         slope, intercept = np.polyfit(xs, ys, 1)
 
         dist_msg = Float32()
-        dist_msg.data = (intercept * self.SIDE)
+        dist_msg.data = abs(intercept)
         self.dist_pub.publish(dist_msg)
 
         x = [float(i) for i in range(5)]
