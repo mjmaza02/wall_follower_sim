@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'wall_follower = wall_follower.wall_follower:main',
 	    'viz_example = wall_follower.viz_example:main',
+        'scan_parse = wall_follower.scan_parse:main',
         ],
     },
 )
