@@ -22,10 +22,12 @@ class WallFollower(Node):
         self.declare_parameter("velocity", "default")
         self.declare_parameter("desired_distance", "default")
         self.declare_parameter('wall_topic', '/wall')
+        self.declare_parameter('safety_drive_topic', '/follow_drive')
 
         # Fetch constants from the ROS parameter server
         self.SCAN_TOPIC = self.get_parameter('scan_topic').get_parameter_value().string_value
         self.DRIVE_TOPIC = self.get_parameter('drive_topic').get_parameter_value().string_value
+        self.SAFETY_DRIVE_TOPIC = self.get_parameter('safety_drive_topic').get_parameter_value().string_value
         self.SIDE = self.get_parameter('side').get_parameter_value().integer_value
         self.VELOCITY = self.get_parameter('velocity').get_parameter_value().double_value
         self.DESIRED_DISTANCE = self.get_parameter('desired_distance').get_parameter_value().double_value
@@ -33,10 +35,10 @@ class WallFollower(Node):
 
         # Based on the right or left side, the car will only 
         # account for scans in the cone between these angles
-        # side_min_angle_magnitude : Radians, set >= 0
-        # side_max_angle_magnitude : Radians, set <= 135 
-        self.side_min_angle_magnitude = -45* (np.pi/180)
-        self.side_max_angle_magnitude = 135 * (np.pi/180)
+        # side_min_angle : Radians, set >= 0
+        # side_max_angle : Radians, set <= 135 
+        self.side_min_angle = -45* (np.pi/180)
+        self.side_max_angle = 135 * (np.pi/180)
 
         # Another parameter you can set is the distance at which a scan is disregarded (Look-Ahead Distance) 
         # max_scan_distance : meters
@@ -52,7 +54,7 @@ class WallFollower(Node):
     
         # Publishers
         self.wall_visual_publihser = self.create_publisher(Marker, self.WALL_TOPIC, 10)
-        self.drive_input_publisher = self.create_publisher(AckermannDriveStamped, self.DRIVE_TOPIC,10)
+        self.drive_input_publisher = self.create_publisher(AckermannDriveStamped, self.SAFETY_DRIVE_TOPIC, 10) # Set to self.DRIVE_TOPIC to circumvent the safety controller
 
         # Subscribtion 
         self.create_subscription(LaserScan, self.SCAN_TOPIC, self.laser_callback, 10)
@@ -68,24 +70,24 @@ class WallFollower(Node):
         num_points = len(laser_scan.ranges)
         distances = np.array(laser_scan.ranges)
         angles = np.linspace(laser_scan.angle_min, laser_scan.angle_max, num_points)
-        scan_polar_vectors = np.vstack((distances, angles))
+        scan_vectors = np.vstack((distances, angles))
         
         # Filter Points based on Side & Angles
         if self.SIDE == 1:
-            scan_polar_vectors = scan_polar_vectors[:, (scan_polar_vectors[1,:]<= self.side_max_angle_magnitude) & (scan_polar_vectors[1,:]>= self.side_min_angle_magnitude)]
+            scan_vectors = scan_vectors[:, (scan_vectors[1,:]<= self.side_max_angle) & (scan_vectors[1,:]>= self.side_min_angle)]
         else:
-            scan_polar_vectors = scan_polar_vectors[:, (-scan_polar_vectors[1,:] <= self.side_max_angle_magnitude) & (-scan_polar_vectors[1,:] >= self.side_min_angle_magnitude)]
+            scan_vectors = scan_vectors[:, (-scan_vectors[1,:] <= self.side_max_angle) & (-scan_vectors[1,:] >= self.side_min_angle)]
         
         # Filter Points based on Look-Ahead Distance
-        scan_polar_vectors = scan_polar_vectors[:, scan_polar_vectors[0, :] <= self.max_scan_distance]
+        scan_vectors = scan_vectors[:, scan_vectors[0, :] <= self.max_scan_distance]
             
         # Find X,Y points (+Visualize), Gather PID output, Feed to Command Input
-        if scan_polar_vectors.size == 0:
+        if scan_vectors.size == 0:
             output_steering_angle = 0
             velocity = self.VELOCITY
         else:
-            xs = scan_polar_vectors[0,:]*np.cos(scan_polar_vectors[1,:])
-            ys = scan_polar_vectors[0,:]*np.sin(scan_polar_vectors[1,:])
+            xs = scan_vectors[0,:]*np.cos(scan_vectors[1,:])
+            ys = scan_vectors[0,:]*np.sin(scan_vectors[1,:])
 
             best_model, best_inliers = self.ransac(xs, ys, sample_size=len(xs))
 
@@ -148,12 +150,12 @@ class WallFollower(Node):
         return (KP_Distance*error[0] + KP_Slope*error[1] + KD_Distance*error_dot_distance + KD_Slope*error_dot_slope)/2
 
     
-    def ransac(self,X, y, n_iterations=100, sample_size=20, inlier_threshold=1.0):
+    def ransac(self,X, y, n_iters=100, sample_size=20, inlier_threshold=1.0):
         best_model = None
         best_inliers = None
         max_inliers = 0
 
-        for _ in range(n_iterations):
+        for _ in range(n_iters):
             # Step 1: Randomly sample a subset of points
             random_indices = random.sample(range(len(X)), sample_size)
             X_sampled = X[random_indices]
